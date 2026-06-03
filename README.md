@@ -1,4 +1,4 @@
-# LLM-Document-Extraction-System
+# DocFlow:A LLM-Document-Extraction-System
 
 > 基于大语言模型的异构文档理解与结构化信息抽取系统，支持从多格式数据源文档中自动提取信息并填写 Excel 或 Word 模板。**v2.0 起内置多租户与权限管理。**
 
