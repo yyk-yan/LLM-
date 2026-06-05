@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+env/
+
+# 项目运行时数据（含密码哈希、API Key、用户文件）
+backend/auth.db
+backend/auth.db-journal
+backend/uploads/
+backend/field_mapping_db/
+backend/library/
+outputs/
+
+# 向量模型（约 400MB，README 说明用户自行下载）
+backend/models/
+
+# 本地测试样本（含真实业务文档）
+backend/*.xlsx
+backend/*.xls
+backend/*.pdf
+backend/*.docx
+backend/testCoT.txt
+backend/filled_*
+
+# 一次性辅助脚本
+check.py
+download.py
+install-pyenv-win.ps1
+
+# IDE / 编辑器
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Claude Code 本地配置
+.claude/settings.local.json
+
+# 环境变量样本（如含真实 key 也不要传）
+.env
+.env.local
+
+# 系统
+.DS_Store
+Thumbs.db
+desktop.ini
