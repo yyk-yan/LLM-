@@ -102,6 +102,23 @@ class UserSetting(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
+class LibraryFile(Base):
+    """租户内共享的文档库文件元数据。文件实体存在 backend/library/<slug>/<file_id>_<filename>。"""
+    __tablename__ = "library_files"
+    id = Column(Integer, primary_key=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True)
+    uploader_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    file_id = Column(String(32), unique=True, nullable=False, index=True)  # 用于 URL 与磁盘路径
+    filename = Column(String(255), nullable=False)                          # 原始文件名（展示用）
+    size_bytes = Column(Integer, nullable=False, default=0)
+    content_type = Column(String(128), nullable=True)
+    description = Column(String(512), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    tenant = relationship("Tenant")
+    uploader = relationship("User")
+
+
 def get_db():
     """FastAPI 依赖：每次请求一个独立 Session"""
     db = SessionLocal()
