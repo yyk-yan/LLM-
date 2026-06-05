@@ -8,6 +8,7 @@ try { currentUser = JSON.parse(localStorage.getItem(USER_KEY) || 'null'); } catc
 
 let selectedSrcFiles = [];
 let selectedTplFile = null;
+let selectedLibFile = null;
 
 // ========== HTTP wrapper ==========
 async function api(path, opts = {}) {
@@ -64,7 +65,7 @@ function showApp() {
 }
 
 function showPanel(name) {
-  ['mainPanel', 'adminPanel', 'changePwdPanel', 'settingsPanel'].forEach(id => {
+  ['mainPanel', 'adminPanel', 'changePwdPanel', 'settingsPanel', 'libraryPanel'].forEach(id => {
     document.getElementById(id).classList.add('hidden');
   });
   if (name === 'main') document.getElementById('mainPanel').classList.remove('hidden');
@@ -76,6 +77,11 @@ function showPanel(name) {
   if (name === 'settings') {
     document.getElementById('settingsPanel').classList.remove('hidden');
     loadLlmSettings();
+  }
+  if (name === 'library') {
+    document.getElementById('libraryPanel').classList.remove('hidden');
+    setupLibraryEventsOnce();
+    loadLibrary();
   }
 }
 
@@ -148,6 +154,7 @@ function resetMainPanelUI() {
     'srcList', 'srcMsg', 'tplInfo', 'fillResult',
     'usersBox', 'invBox', 'tenantsBox', 'pwdMsg',
     'loginMsg', 'regMsg', 'llmMsg',
+    'libSelected', 'libMsg', 'libList',
   ];
   ids.forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = ''; });
 
@@ -157,22 +164,31 @@ function resetMainPanelUI() {
     'oldPwd', 'newPwd', 'invEmail',
     'newTenantSlug', 'newTenantName', 'newTenantAdminEmail',
     'llmModel', 'llmBaseUrl', 'llmApiKey',
+    'libDesc',
   ];
   valIds.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
 
   // 文件 input 必须重置 value 才能再次选择同名文件
   const srcInput = document.getElementById('srcInput');
   const tplInput = document.getElementById('tplInput');
+  const libInput = document.getElementById('libInput');
   if (srcInput) srcInput.value = '';
   if (tplInput) tplInput.value = '';
+  if (libInput) libInput.value = '';
 
   const srcCnt = document.getElementById('srcCnt');
   if (srcCnt) srcCnt.textContent = '0 个';
+  const libCnt = document.getElementById('libCnt');
+  if (libCnt) libCnt.textContent = '0 个';
 
   const uploadBtn = document.getElementById('uploadBtn');
   const fillBtn = document.getElementById('fillBtn');
+  const libUploadBtn = document.getElementById('libUploadBtn');
   if (uploadBtn) uploadBtn.disabled = true;
   if (fillBtn) fillBtn.disabled = true;
+  if (libUploadBtn) libUploadBtn.disabled = true;
+
+  selectedLibFile = null;
 
   const fillLoading = document.getElementById('fillLoading');
   if (fillLoading) fillLoading.style.display = 'none';
@@ -243,6 +259,146 @@ async function clearLlmApiKey() {
   } catch (e) {
     showMsg('llmMsg', 'msg-err', '清除失败：' + e.message);
   }
+}
+
+// ========== 文档库（部门内共享） ==========
+let _libEventsBound = false;
+function setupLibraryEventsOnce() {
+  if (_libEventsBound) return;
+  _libEventsBound = true;
+
+  const zone = document.getElementById('libZone');
+  if (zone) {
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.style.borderColor = 'rgba(37,99,235,0.65)'; });
+    zone.addEventListener('dragleave', () => { zone.style.borderColor = ''; });
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.style.borderColor = '';
+      if (e.dataTransfer.files && e.dataTransfer.files.length) {
+        document.getElementById('libInput').files = e.dataTransfer.files;
+        onLibSelected(e.dataTransfer.files);
+      }
+    });
+  }
+  const input = document.getElementById('libInput');
+  if (input) input.addEventListener('change', e => onLibSelected(e.target.files));
+}
+
+function onLibSelected(files) {
+  if (!files || !files.length) return;
+  selectedLibFile = files[0];
+  document.getElementById('libSelected').innerHTML =
+    `<div class="file-item">
+      <span class="file-name">📄 ${escapeHtml(selectedLibFile.name)}</span>
+      <span class="file-size">${(selectedLibFile.size / 1024).toFixed(1)} KB</span>
+      <span class="tag tag-wait">已选择</span>
+    </div>`;
+  document.getElementById('libUploadBtn').disabled = false;
+  document.getElementById('libMsg').innerHTML = '';
+}
+
+async function uploadLibrary() {
+  if (!selectedLibFile) return;
+  const btn = document.getElementById('libUploadBtn');
+  btn.disabled = true;
+  btn.textContent = '上传中...';
+  document.getElementById('libMsg').innerHTML = '<div class="msg msg-info">正在上传...</div>';
+
+  const fd = new FormData();
+  fd.append('file', selectedLibFile);
+  const desc = document.getElementById('libDesc').value.trim();
+  if (desc) fd.append('description', desc);
+
+  try {
+    await api('/api/library/upload', { method: 'POST', body: fd });
+    document.getElementById('libMsg').innerHTML =
+      `<div class="msg msg-info">✅ 上传成功：${escapeHtml(selectedLibFile.name)}</div>`;
+    document.getElementById('libDesc').value = '';
+    document.getElementById('libSelected').innerHTML = '';
+    document.getElementById('libInput').value = '';
+    selectedLibFile = null;
+    loadLibrary();
+  } catch (e) {
+    document.getElementById('libMsg').innerHTML = `<div class="msg msg-err">❌ 上传失败：${e.message}</div>`;
+  } finally {
+    btn.disabled = !selectedLibFile;
+    btn.textContent = '上传到文档库';
+  }
+}
+
+async function loadLibrary() {
+  const box = document.getElementById('libList');
+  box.innerHTML = '<div class="msg msg-info">加载中...</div>';
+  try {
+    const data = await api('/api/library');
+    const items = data.items || [];
+    document.getElementById('libCnt').textContent = `${items.length} 个`;
+
+    if (!items.length) {
+      box.innerHTML = '<div class="msg msg-info">还没有文件，先上传一个吧 📤</div>';
+      return;
+    }
+
+    const rows = items.map(f => {
+      const time = (f.created_at || '').replace('T', ' ').slice(0, 16);
+      const showDelete = f.can_delete || data.is_admin;
+      return `<tr>
+        <td>📄 ${escapeHtml(f.filename)}${f.description ? `<div style="color:rgba(30,58,138,0.50);font-size:11px;margin-top:2px">${escapeHtml(f.description)}</div>` : ''}</td>
+        <td>${f.size_kb} KB</td>
+        <td>${escapeHtml(f.uploader_name || '')}</td>
+        <td>${time}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-ghost" style="padding:5px 12px;font-size:12px" onclick="downloadLibrary('${f.file_id}', '${encodeURIComponent(f.filename)}')">⬇ 下载</button>
+          ${showDelete ? `<button class="btn btn-danger" style="padding:5px 12px;font-size:12px;margin-left:6px" onclick="deleteLibrary('${f.file_id}', '${escapeHtml(f.filename)}')">🗑 删除</button>` : ''}
+        </td>
+      </tr>`;
+    }).join('');
+
+    box.innerHTML = `
+      <table>
+        <thead><tr><th>文件名</th><th>大小</th><th>上传者</th><th>上传时间</th><th>操作</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  } catch (e) {
+    box.innerHTML = `<div class="msg msg-err">加载失败：${e.message}</div>`;
+  }
+}
+
+async function downloadLibrary(fileId, encodedName) {
+  try {
+    const res = await fetch(API + '/api/library/download/' + encodeURIComponent(fileId), {
+      headers: token ? { 'Authorization': 'Bearer ' + token } : {},
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail || ('HTTP ' + res.status));
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = decodeURIComponent(encodedName);
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('下载失败：' + e.message);
+  }
+}
+
+async function deleteLibrary(fileId, filename) {
+  if (!confirm(`确定删除文件「${filename}」？\n该操作不可撤销。`)) return;
+  try {
+    await api('/api/library/' + encodeURIComponent(fileId), { method: 'DELETE' });
+    loadLibrary();
+  } catch (e) {
+    alert('删除失败：' + e.message);
+  }
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
 
 // ========== 管理面板 ==========
