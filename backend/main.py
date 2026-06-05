@@ -26,6 +26,7 @@ from filler import fill_xlsx, fill_docx
 from auth import get_current_user
 from db import User, UserSetting, init_db, DEFAULT_TENANT_SLUG, get_db
 from tenant_admin import router_auth, router_admin
+from library import router_library
 import rag_mapper
 from sqlalchemy.orm import Session
 
@@ -120,9 +121,10 @@ def _startup():
     _migrate_legacy_files()
 
 
-# 把认证 / 管理路由挂上
+# 把认证 / 管理 / 文档库路由挂上
 app.include_router(router_auth)
 app.include_router(router_admin)
+app.include_router(router_library)
 
 
 @app.get("/")
