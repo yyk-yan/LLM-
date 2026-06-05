@@ -13,6 +13,7 @@ backend/auth.db
 backend/auth.db-journal
 backend/uploads/
 backend/field_mapping_db/
+backend/library/
 outputs/
 
 # 向量模型（约 400MB，README 说明用户自行下载）

@@ -14,7 +14,7 @@ from sentence_transformers import SentenceTransformer
 DB_PATH = os.path.join(os.path.dirname(__file__), "field_mapping_db")
 MODEL_PATH = os.path.join(os.path.dirname(__file__), "models", "minilm")
 
-DEFAULT_TENANT_ID = 1  # 与 db.py 中默认租户对应；旧数据迁移时也写到这里
+DEFAULT_TENANT_ID = 1
 
 _client = None
 _collection = None
@@ -67,9 +67,10 @@ def add_mapping(source_field: str, target_field: str, tenant_id: int, score: flo
         print(f"  写入知识库失败: {e}")
 
 
-def retrieve_mapping(query_field: str, tenant_id: int, top_k: int = 3, threshold: float = 0.85) -> list:
+def retrieve_mapping(query_field: str, tenant_id: int, top_k: int = 3, threshold: float = 0.92) -> list:
     """
     检索历史相似映射（仅在该租户范围内）
+    修复：阈值提高到0.92，只返回相似度最高的一条，避免多条记录互相干扰导致乱映射
     """
     if tenant_id is None:
         raise ValueError("retrieve_mapping 必须传入 tenant_id")
@@ -92,6 +93,7 @@ def retrieve_mapping(query_field: str, tenant_id: int, top_k: int = 3, threshold
     if not results.get("metadatas") or not results["metadatas"][0]:
         return []
 
+    # 修复：只取相似度最高的一条，避免同一source对应多个target时乱命中
     filtered = []
     for meta, distance in zip(results["metadatas"][0], results["distances"][0]):
         similarity = 1 - distance
@@ -100,6 +102,7 @@ def retrieve_mapping(query_field: str, tenant_id: int, top_k: int = 3, threshold
                 "target": meta["target"],
                 "similarity": round(similarity, 3),
             })
+            break  # 只取最相似的一条
     return filtered
 
 
